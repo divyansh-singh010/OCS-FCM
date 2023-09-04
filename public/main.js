@@ -1,130 +1,71 @@
 'use strict';
 
-// Initialize the app and set up event listeners.
-function initApp() {
-  const signInButton = document.getElementById('demo-sign-in-button');
-  const signOutButton = document.getElementById('demo-sign-out-button');
+// Initialize Firebase
+firebase.initializeApp();
 
-  signInButton.addEventListener('click', signIn);
-  signOutButton.addEventListener('click', signOut);
+// DOM elements
+const emailInput = document.getElementById('email');
+const passwordInput = document.getElementById('password');
+const signInButton = document.getElementById('demo-sign-in-button');
+const signOutButton = document.getElementById('demo-sign-out-button');
+const usersContainer = document.getElementById('demo-all-users-list');
+const nameContainer = document.getElementById('demo-name-container');
 
-  firebase.auth().onAuthStateChanged(onAuthStateChanged);
-  firebase.messaging().onMessage(onMessage);
-}
+// Event listeners
+signInButton.addEventListener('click', signInWithEmail);
+signOutButton.addEventListener('click', signOut);
 
-// Handle authentication state changes.
-function onAuthStateChanged(user) {
-  const signedOutCard = document.getElementById('demo-signed-out-card');
-  const signedInCard = document.getElementById('demo-signed-in-card');
-  const usersCard = document.getElementById('demo-all-users-card');
-  const nameContainer = document.getElementById('demo-name-container');
-
+// Firebase authentication state change listener
+firebase.auth().onAuthStateChanged(user => {
   if (user) {
+    // User is signed in
     nameContainer.innerText = user.displayName;
-    signedOutCard.style.display = 'none';
-    signedInCard.style.display = 'block';
-    usersCard.style.display = 'block';
-
-    firebase.database().ref(`users/${user.uid}`).update({
-      displayName: user.displayName,
-      photoURL: user.photoURL
-    });
-
-    saveToken();
-    displayAllUsers();
+    usersContainer.style.display = 'block';
+    fetchAllUsers();
   } else {
-    signedOutCard.style.display = 'block';
-    signedInCard.style.display = 'none';
-    usersCard.style.display = 'none';
+    // User is signed out
     nameContainer.innerText = '';
+    usersContainer.style.display = 'none';
   }
+});
+
+// Sign in with email and password
+function signInWithEmail() {
+  const email = emailInput.value;
+  const password = passwordInput.value;
+
+  firebase.auth().signInWithEmailAndPassword(email, password)
+    .then(() => {
+      // Sign-in successful
+    })
+    .catch(error => {
+      // Handle sign-in error
+      console.error('Sign-in error:', error);
+    });
 }
 
-// Display a list of all users.
-function displayAllUsers() {
-  const usersContainer = document.getElementById('demo-all-users-list');
-  const usersRef = firebase.database().ref('users');
-
-  usersRef.on('child_added', snapshot => {
-    const { photoURL, displayName } = snapshot.val();
-    const uid = snapshot.key;
-
-    const userElement = createUserElement(photoURL, displayName, uid);
-    usersContainer.appendChild(userElement);
-  });
-}
-
-// Create a user element.
-function createUserElement(photoURL, displayName, uid) {
-  const userElement = document.createElement('div');
-  userElement.classList.add('demo-user-container');
-
-  userElement.innerHTML = `
-    <img class="demo-profile-pic" src="${photoURL}">
-    <span class="demo-name">${displayName}</span>
-    <label class="mdl-switch mdl-js-switch mdl-js-ripple-effect" for="demo-follow-switch-${uid}">
-      <input type="checkbox" id="demo-follow-switch-${uid}" class="mdl-switch__input">
-      <span class="mdl-switch__label">Follow</span>
-    </label>
-  `;
-
-  return userElement;
-}
-
-// Sign in using Google authentication.
-function signIn() {
-  const googleAuthProvider = new firebase.auth.GoogleAuthProvider();
-  firebase.auth().signInWithPopup(googleAuthProvider);
-}
-
-// Sign out.
+// Sign out
 function signOut() {
   firebase.auth().signOut();
 }
 
-// Handle incoming notifications.
-function onMessage(payload) {
-  console.log('Notification received:', payload);
-
-  if (payload.notification) {
-    showBrowserNotification(payload.notification.title, payload.notification.body);
-  }
+// Fetch and display all users
+function fetchAllUsers() {
+  const usersRef = firebase.database().ref('users');
+  usersRef.on('child_added', snapshot => {
+    const {displayName } = snapshot.val();
+    const uid = snapshot.key;
+    const userElement = createUserElement(displayName, uid);
+    usersContainer.appendChild(userElement);
+  });
 }
 
-// Show a browser notification.
-function showBrowserNotification(title, body) {
-  if (window.Notification instanceof Function) {
-    new Notification(title, { body });
-  }
+// Create a user element
+function createUserElement(displayName, uid) {
+  const userElement = document.createElement('div');
+  userElement.classList.add('demo-user-container');
+  userElement.innerHTML = `
+    <span class="demo-name">${displayName}</span>
+  `;
+  return userElement;
 }
-
-// Save the FCM token to the database if available.
-function saveToken() {
-  firebase.messaging().getToken()
-    .then(currentToken => {
-      if (currentToken) {
-        firebase.database().ref(`users/${firebase.auth().currentUser.uid}/notificationTokens/${currentToken}`).set(true);
-      } else {
-        requestPermission();
-      }
-    })
-    .catch(error => {
-      console.error('Unable to get messaging token:', error);
-    });
-}
-
-// Request permission to send notifications.
-function requestPermission() {
-  console.log('Requesting permission...');
-  firebase.messaging().requestPermission()
-    .then(() => {
-      console.log('Notification permission granted.');
-      saveToken();
-    })
-    .catch(error => {
-      console.error('Unable to get permission to notify:', error);
-    });
-}
-
-// Initialize the app when the DOM is loaded.
-document.addEventListener('DOMContentLoaded', initApp);
